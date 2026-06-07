@@ -35,7 +35,7 @@ export default async function MasterRequestPage({ params }: { params: Promise<{ 
   const canRespond = !myResponse && ['waiting_master_offers', 'waiting_client_selection'].includes(req.status)
   const isAssigned = req.assigned_master_id === profile.id
   const restaurant = req.restaurant as unknown as { name: string; address: string } | null
-  const events = (req.events as any[]) ?? []
+  const events = ((req.events as unknown as any[]) ?? [])
 
   return (
     <div className="max-w-xl mx-auto px-4 py-6 space-y-4">
