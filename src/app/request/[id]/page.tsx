@@ -37,10 +37,10 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
   const isClient = profile.role === 'client'
   const isMaster = profile.role === 'master'
   const canSelect = isClient && req.status === 'waiting_client_selection'
-  const restaurant = req.restaurant as { name: string; address: string } | null
-  const master = req.master as { id: string; name: string | null; phone: string } | null
-  const responses = (req.responses as any[]) ?? []
-  const events = (req.events as any[]) ?? []
+  const restaurant = req.restaurant as unknown as { name: string; address: string } | null
+const master = req.master as unknown as { id: string; name: string | null; phone: string } | null
+const responses = ((req.responses as unknown as any[]) ?? [])
+const events = ((req.events as unknown as any[]) ?? [])
 
   return (
     <div className="max-w-xl mx-auto px-4 py-6 space-y-4">
