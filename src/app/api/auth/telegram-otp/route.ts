@@ -11,28 +11,20 @@ async function sendTelegramCode(phone: string, code: string): Promise<boolean> {
 
   const admin = getAdminClient()
 
-  // Найти пользователя по телефону и получить telegram_chat_id
   const { data: profile } = await admin
     .from('profiles')
-    .select('telegram_chat_id, name')
+    .select('telegram_chat_id')
     .eq('phone', phone)
     .single()
 
-  if (!profile?.telegram_chat_id) {
-    // Пользователь ещё не связал Telegram
-    return false
-  }
+  if (!profile?.telegram_chat_id) return false
 
   const text = `🔐 Ваш код входа: <b>${code}</b>\n\nКод действителен 10 минут.\nНе сообщайте код никому.`
 
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: profile.telegram_chat_id,
-      text,
-      parse_mode: 'HTML'
-    })
+    body: JSON.stringify({ chat_id: profile.telegram_chat_id, text, parse_mode: 'HTML' })
   })
 
   return res.ok
@@ -46,25 +38,17 @@ export async function POST(req: NextRequest) {
 
   const admin = getAdminClient()
 
-  // ─── SEND ────────────────────────────────────────────────────
+  // ─── SEND ─────────────────────────────────────────────────────
   if (action === 'send') {
-    // Удалить старые коды
     await admin.from('telegram_otp').delete().eq('phone', phone)
 
     const newCode = generateCode()
-
-    // Сохранить код
-    await admin.from('telegram_otp').insert({
-      phone,
-      code: newCode,
-      used: false,
-    })
+    await admin.from('telegram_otp').insert({ phone, code: newCode, used: false })
 
     const sent = await sendTelegramCode(phone, newCode)
-
     if (!sent) {
       return NextResponse.json(
-        { error: 'Telegram не привязан. Сначала напишите боту /start и укажите свой номер телефона.' },
+        { error: 'Telegram не привязан. Откройте бота и отправьте свой номер телефона.' },
         { status: 400 }
       )
     }
@@ -72,7 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true })
   }
 
-  // ─── VERIFY ──────────────────────────────────────────────────
+  // ─── VERIFY ───────────────────────────────────────────────────
   if (action === 'verify') {
     if (!code) return NextResponse.json({ error: 'Code required' }, { status: 400 })
 
@@ -89,52 +73,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Неверный или истёкший код' }, { status: 401 })
     }
 
-    // Пометить код использованным
     await admin.from('telegram_otp').update({ used: true }).eq('id', otpRow.id)
 
-    // Найти или создать пользователя
-    let { data: profile } = await admin
+    // Найти профиль по телефону
+    const { data: profile } = await admin
       .from('profiles')
-      .select('id')
+      .select('id, email')
       .eq('phone', phone)
       .single()
 
     if (!profile) {
-      // Создать auth user
-      const { data: newUser } = await admin.auth.admin.createUser({
-        phone,
-        phone_confirm: true,
-      })
-
-      if (!newUser.user) {
-        return NextResponse.json({ error: 'Ошибка создания пользователя' }, { status: 500 })
-      }
-
-      // Профиль создастся автоматически через триггер
-      profile = { id: newUser.user.id }
+      return NextResponse.json({ error: 'Пользователь не найден. Сначала откройте бота.' }, { status: 404 })
     }
 
-    // Создать сессию
-    const { data: session } = await admin.auth.admin.createUser({
-      phone,
-      phone_confirm: true,
-    })
-
-    // Получить ссылку для входа
-    const { data: link } = await admin.auth.admin.generateLink({
+    // Создать magic link для входа по email профиля
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
       type: 'magiclink',
-      email: `${phone.replace(/\+/g, '').replace(/\s/g, '')}@phone.local`,
+      email: profile.email,
     })
 
-    if (!link) {
+    if (linkError || !linkData) {
       return NextResponse.json({ error: 'Ошибка создания сессии' }, { status: 500 })
     }
 
-    return NextResponse.json({
-      success: true,
-      access_token: link.properties?.access_token,
-      refresh_token: link.properties?.refresh_token,
-    })
+    // Извлечь токены из hashed_token через verifyOtp
+    const { data: sessionData, error: sessionError } = await admin.auth.admin.getUserById(profile.id)
+    if (sessionError) {
+      return NextResponse.json({ error: 'Ошибка сессии' }, { status: 500 })
+    }
+
+    // Вернуть ссылку для редиректа — клиент перейдёт по ней
+    const actionLink = (linkData as any).action_link ?? linkData.properties?.action_link
+    return NextResponse.json({ success: true, action_link: actionLink })
   }
 
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
