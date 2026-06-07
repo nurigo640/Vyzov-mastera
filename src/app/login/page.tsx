@@ -9,7 +9,7 @@ export default function LoginPage() {
 
     const script = document.createElement('script')
     script.src = 'https://telegram.org/js/telegram-widget.js?22'
-    script.setAttribute('data-telegram-login', 'ИМЯ_ТВОЕГО_БОТА')
+    script.setAttribute('data-telegram-login', 'vyzov_master_kz_bot')
     script.setAttribute('data-size', 'large')
     script.setAttribute('data-auth-url', `${window.location.origin}/api/auth/telegram-callback`)
     script.setAttribute('data-request-access', 'write')
