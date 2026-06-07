@@ -50,9 +50,9 @@ export async function GET(req: NextRequest) {
     userId = existing.id
     await admin.from('profiles').update({ name }).eq('id', userId)
   } else {
-    // Проверить есть ли auth user с таким email
+   // Проверить есть ли auth user с таким email
     const { data: users } = await admin.auth.admin.listUsers()
-    const existingUser = users?.users?.find(u => u.email === email)
+    const existingUser = (users as any)?.users?.find((u: any) => u.email === email)
 
     if (existingUser) {
       userId = existingUser.id
