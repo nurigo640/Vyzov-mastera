@@ -79,10 +79,19 @@ export async function GET(req: NextRequest) {
     await admin.from('profiles').update({ name, telegram_chat_id: telegramId }).eq('id', profile.id)
   }
 
-  // Создать magic link для входа
+  // Создать сессию напрямую
+  const { data: sessionData, error: sessionError } = await admin.auth.admin.createUser({
+    email: profile.email ?? email,
+    email_confirm: true,
+  })
+
+  // Генерируем ссылку с правильным redirect
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email: profile.email ?? email,
+    options: {
+      redirectTo: `${origin}/`
+    }
   })
 
   if (linkError || !linkData) {
