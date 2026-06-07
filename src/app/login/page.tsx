@@ -2,28 +2,55 @@
 import { useState } from 'react'
 import { getBrowserClient } from '@/lib/supabase-browser'
 
+type Step = 'phone' | 'otp'
+
 export default function LoginPage() {
-  const [step, setStep] = useState<'email' | 'otp'>('email')
-  const [email, setEmail] = useState('')
+  const [step, setStep] = useState<Step>('phone')
+  const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [telegramSent, setTelegramSent] = useState(false)
 
-  async function sendOTP() {
+  async function sendCode() {
     setLoading(true)
     setError('')
-    const sb = getBrowserClient()
-    const { error: e } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
-    if (e) setError(e.message)
-    else setStep('otp')
+    const normalized = phone.startsWith('+') ? phone : `+${phone}`
+
+    const res = await fetch('/api/auth/telegram-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: normalized, action: 'send' })
+    })
+
+    const json = await res.json()
+    if (!res.ok) { setError(json.error ?? 'Ошибка'); setLoading(false); return }
+
+    setTelegramSent(true)
+    setStep('otp')
     setLoading(false)
   }
 
-  async function verifyOTP() {
+  async function verifyCode() {
     setLoading(true)
     setError('')
+    const normalized = phone.startsWith('+') ? phone : `+${phone}`
+
+    const res = await fetch('/api/auth/telegram-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: normalized, code: otp, action: 'verify' })
+    })
+
+    const json = await res.json()
+    if (!res.ok) { setError(json.error ?? 'Неверный код'); setLoading(false); return }
+
+    // Sign in with the token from server
     const sb = getBrowserClient()
-    const { error: e } = await sb.auth.verifyOtp({ email, token: otp, type: 'email' })
+    const { error: e } = await sb.auth.setSession({
+      access_token: json.access_token,
+      refresh_token: json.refresh_token
+    })
     if (e) { setError(e.message); setLoading(false); return }
     window.location.href = '/'
   }
@@ -35,37 +62,45 @@ export default function LoginPage() {
           <div className="text-4xl mb-3">🔧</div>
           <h1 className="text-xl font-semibold">Вызов мастера</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {step === 'email' ? 'Войдите по email' : `Код отправлен на ${email}`}
+            {step === 'phone' ? 'Войдите по номеру телефона' : 'Введите код из Telegram'}
           </p>
         </div>
 
-        {step === 'email' ? (
+        {step === 'phone' ? (
           <div className="space-y-4">
             <div>
-              <label className="label">Email</label>
+              <label className="label">Номер телефона</label>
               <input
                 className="input"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && email.includes('@') && sendOTP()}
+                type="tel"
+                placeholder="+7 701 234 56 78"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && phone.length > 5 && sendCode()}
                 autoFocus
               />
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
             <button
               className="btn-primary w-full"
-              onClick={sendOTP}
-              disabled={loading || !email.includes('@')}
+              onClick={sendCode}
+              disabled={loading || phone.length < 6}
             >
-              {loading ? 'Отправка...' : 'Получить код'}
+              {loading ? 'Отправка...' : '📱 Получить код в Telegram'}
             </button>
+            <p className="text-xs text-gray-400 text-center">
+              Код придёт в Telegram от бота
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
+            {telegramSent && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+                ✅ Код отправлен в Telegram. Проверьте сообщения от бота.
+              </div>
+            )}
             <div>
-              <label className="label">Код из письма</label>
+              <label className="label">Код из Telegram</label>
               <input
                 className="input text-center tracking-widest text-lg"
                 type="text"
@@ -74,21 +109,23 @@ export default function LoginPage() {
                 placeholder="000000"
                 value={otp}
                 onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                onKeyDown={e => e.key === 'Enter' && otp.length === 6 && verifyOTP()}
+                onKeyDown={e => e.key === 'Enter' && otp.length === 6 && verifyCode()}
                 autoFocus
               />
-              <p className="text-xs text-gray-400 mt-1">Проверьте папку «Спам»</p>
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
             <button
               className="btn-primary w-full"
-              onClick={verifyOTP}
+              onClick={verifyCode}
               disabled={loading || otp.length < 6}
             >
               {loading ? 'Проверка...' : 'Войти'}
             </button>
-            <button className="btn-secondary w-full" onClick={() => { setStep('email'); setOtp(''); setError('') }}>
-              ← Изменить email
+            <button
+              className="btn-secondary w-full"
+              onClick={() => { setStep('phone'); setOtp(''); setError('') }}
+            >
+              ← Изменить номер
             </button>
           </div>
         )}
