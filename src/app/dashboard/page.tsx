@@ -14,7 +14,7 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
     .limit(30)
 
-  const requests = (data ?? []) as Array<{
+  const requests = (data ?? []) as unknown as Array<{
     id: string
     status: string
     equipment_type: string
