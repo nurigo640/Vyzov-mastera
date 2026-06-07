@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 const EQUIPMENT = [
@@ -14,7 +14,7 @@ const EQUIPMENT = [
   { value: 'other',          label: 'Другое' },
 ]
 
-export default function NewRequestPage() {
+function NewRequestForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const restaurantId = searchParams.get('restaurant_id') ?? ''
@@ -58,7 +58,6 @@ export default function NewRequestPage() {
   return (
     <div className="max-w-xl mx-auto px-4 py-6">
       <h1 className="text-lg font-semibold mb-6">Новая заявка на ремонт</h1>
-
       <div className="space-y-4">
         <div>
           <label className="label">Тип оборудования *</label>
@@ -124,5 +123,13 @@ export default function NewRequestPage() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function NewRequestPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-gray-400">Загрузка...</div>}>
+      <NewRequestForm />
+    </Suspense>
   )
 }
